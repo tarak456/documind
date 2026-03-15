@@ -3,24 +3,15 @@ from groq import Groq
 
 
 class RAGEngine:
-    """
-    RAG Pipeline:
-    1. Split document into overlapping chunks
-    2. TF-IDF scoring to find most relevant chunks
-    3. Feed top chunks to Groq (cloud LLM) for summarization or Q&A
-    """
-
     CHUNK_SIZE    = 600
     CHUNK_OVERLAP = 80
     TOP_K         = 5
-    MODEL         = "llama3-8b-8192"   # free & fast on Groq
+    MODEL         = "llama-3.1-8b-instant"
 
     def __init__(self, api_key: str):
         self.client = Groq(api_key=api_key)
         self.chunks: list[str] = []
         self._idf:   dict[str, float] = {}
-
-    # ── Indexing ──────────────────────────────────────────────────────────────
 
     def build_index(self, text: str):
         self.chunks = self._split(text)
@@ -63,8 +54,6 @@ class RAGEngine:
         )
         return [c for _, c in scored[:k]]
 
-    # ── Shared LLM call ───────────────────────────────────────────────────────
-
     def _call_llm(self, prompt: str, max_tokens: int = 1024) -> str:
         response = self.client.chat.completions.create(
             model=self.MODEL,
@@ -72,8 +61,6 @@ class RAGEngine:
             messages=[{"role": "user", "content": prompt}],
         )
         return response.choices[0].message.content.strip()
-
-    # ── Summarization ─────────────────────────────────────────────────────────
 
     def summarize(self, full_text: str, summary_type: str, summary_length: str) -> str:
         length_guide = {
@@ -94,12 +81,11 @@ class RAGEngine:
         if word_count <= 1500:
             context = full_text
         else:
-            query      = "main ideas key points important information summary conclusions"
-            top_chunks = self.retrieve(query)
+            top_chunks = self.retrieve("main ideas key points important information summary conclusions")
             context    = "\n\n---\n\n".join(top_chunks)
-            context   += f"\n\n[Note: Document has ~{word_count:,} words. Showing most relevant sections.]"
+            context   += f"\n\n[Document has ~{word_count:,} words. Showing most relevant sections.]"
 
-        prompt = f"""You are an expert document analyst. Your task is to summarize the document below.
+        prompt = f"""You are an expert document analyst. Summarize the document below.
 
 Style: {style_guide}
 Length: {length_guide}
@@ -107,11 +93,9 @@ Length: {length_guide}
 Document Content:
 {context}
 
-Write the summary directly. Do not say "Here is a summary" or add any preamble."""
+Write the summary directly. Do not add any preamble."""
 
         return self._call_llm(prompt)
-
-    # ── Q&A ───────────────────────────────────────────────────────────────────
 
     def answer_question(self, full_text: str, question: str) -> str:
         word_count = len(full_text.split())
@@ -120,9 +104,8 @@ Write the summary directly. Do not say "Here is a summary" or add any preamble."
         else:
             top_chunks = self.retrieve(question, k=6)
             context    = "\n\n---\n\n".join(top_chunks)
-            context   += f"\n\n[Document has ~{word_count:,} words total. Showing most relevant sections.]"
 
-        prompt = f"""You are a precise document analyst. Answer the following question using ONLY the information found in the document content below.
+        prompt = f"""Answer the following question using ONLY the document content below.
 
 Question: {question}
 
@@ -130,10 +113,8 @@ Document Content:
 {context}
 
 Instructions:
-- Answer directly and specifically based on the document
-- If the answer is not found in the document, say "This information is not mentioned in the document."
-- Be concise but complete
-- Do not add information from outside the document
-- Do not start with phrases like "Based on the document" — just answer directly"""
+- Answer directly from the document only
+- If not found, say "This information is not mentioned in the document."
+- Do not start with "Based on the document" """
 
         return self._call_llm(prompt, max_tokens=512)
