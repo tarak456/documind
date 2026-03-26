@@ -167,25 +167,25 @@ with st.sidebar:
 
     # API Key section
     st.markdown("<div class='sb-section'>", unsafe_allow_html=True)
-    st.markdown("<div class='sb-section-title'>🔑 Groq API Key</div>", unsafe_allow_html=True)
+    st.markdown("<div class='sb-section-title'>🔑 Gemini API Key</div>", unsafe_allow_html=True)
     st.markdown("""
     <div class='api-box'>
         <div class='api-box-title'>Free API Key Required</div>
-        <div class='api-box-sub'>Get yours free at <a class='api-link' href='https://console.groq.com' target='_blank'>console.groq.com</a></div>
+        <div class='api-box-sub'>Get free key at <a class='api-link' href='https://aistudio.google.com' target='_blank'>aistudio.google.com</a></div>
     </div>
     """, unsafe_allow_html=True)
 
     # Check for key in secrets first, else ask user
-    groq_api_key = st.secrets.get("GROQ_API_KEY", "") if hasattr(st, "secrets") else ""
-    if not groq_api_key:
-        groq_api_key = st.text_input(
+    gemini_api_key = st.secrets.get("GEMINI_API_KEY", "") if hasattr(st, "secrets") else ""
+    if not gemini_api_key:
+        gemini_api_key = st.text_input(
             "Enter Groq API Key",
             type="password",
-            placeholder="gsk_...",
+            placeholder="AIza...",
             label_visibility="collapsed",
         )
 
-    if groq_api_key:
+    if gemini_api_key:
         st.markdown("<div class='status-pill status-ok'><div class='status-dot dot-green'></div>API Key set ✓</div>", unsafe_allow_html=True)
     else:
         st.markdown("<div class='status-pill status-warn'><div class='status-dot dot-yellow'></div>Enter API key to start</div>", unsafe_allow_html=True)
@@ -325,7 +325,7 @@ if uploaded_file:
         st.rerun()
 
     if go:
-        if not groq_api_key:
+        if not gemini_api_key:
             st.error("⚠️ Please enter your Groq API key in the sidebar first.")
             st.stop()
 
@@ -354,7 +354,7 @@ if uploaded_file:
         st.session_state.pipeline_stage = 3
         with st.spinner("✂️ Chunking · Scoring · Retrieving top segments..."):
             try:
-                rag = RAGEngine(api_key=groq_api_key)
+                rag = RAGEngine(api_key=gemini_api_key)
                 rag.build_index(st.session_state.doc_text)
                 st.session_state.rag_engine = rag
                 st.session_state.pipeline_stage = 5
