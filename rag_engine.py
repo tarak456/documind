@@ -1,24 +1,23 @@
 import re
-import requests
+from groq import Groq
 
 
 class RAGEngine:
     CHUNK_SIZE    = 600
     CHUNK_OVERLAP = 80
     TOP_K         = 5
-    MODEL         = "gemini-2.0-flash"
-    API_URL       = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
+    MODEL         = "llama-3.1-8b-instant"
 
     def __init__(self, api_key: str):
-        self.api_key = api_key
-        self.chunks = []
-        self._idf   = {}
+        self.client = Groq(api_key=api_key)
+        self.chunks: list[str] = []
+        self._idf:   dict[str, float] = {}
 
     def build_index(self, text: str):
         self.chunks = self._split(text)
         self._build_tfidf()
 
-    def _split(self, text: str) -> list:
+    def _split(self, text: str) -> list[str]:
         words = text.split()
         chunks, i = [], 0
         while i < len(words):
@@ -26,13 +25,13 @@ class RAGEngine:
             i += self.CHUNK_SIZE - self.CHUNK_OVERLAP
         return chunks
 
-    def _tokenize(self, text: str) -> list:
+    def _tokenize(self, text: str) -> list[str]:
         return re.findall(r'[a-z]+', text.lower())
 
     def _build_tfidf(self):
         import math
         N = len(self.chunks)
-        df = {}
+        df: dict[str, int] = {}
         for chunk in self.chunks:
             for term in set(self._tokenize(chunk)):
                 df[term] = df.get(term, 0) + 1
@@ -40,14 +39,14 @@ class RAGEngine:
 
     def _score(self, query: str, chunk: str) -> float:
         q_terms = set(self._tokenize(query))
-        c_terms = self._tokenize(chunk)
-        tf = {}
+        c_terms  = self._tokenize(chunk)
+        tf: dict[str, float] = {}
         for t in c_terms:
             tf[t] = tf.get(t, 0) + 1
         n = len(c_terms) or 1
         return sum((tf.get(t, 0) / n) * self._idf.get(t, 0) for t in q_terms)
 
-    def retrieve(self, query: str, k=None) -> list:
+    def retrieve(self, query: str, k: int | None = None) -> list[str]:
         k = k or self.TOP_K
         scored = sorted(
             [(self._score(query, c), c) for c in self.chunks],
@@ -56,23 +55,12 @@ class RAGEngine:
         return [c for _, c in scored[:k]]
 
     def _call_llm(self, prompt: str, max_tokens: int = 1024) -> str:
-        url = self.API_URL.format(model=self.MODEL, key=self.api_key)
-        body = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "maxOutputTokens": max_tokens,
-                "temperature": 0.3,
-            },
-        }
-        try:
-            r = requests.post(url, json=body, timeout=30)
-            if r.status_code == 200:
-                data = r.json()
-                return data["candidates"][0]["content"]["parts"][0]["text"].strip()
-            err = r.json().get("error", {}).get("message", r.text[:200])
-            return f"API error {r.status_code}: {err}"
-        except Exception as e:
-            return f"Request failed: {str(e)[:150]}"
+        response = self.client.chat.completions.create(
+            model=self.MODEL,
+            max_tokens=max_tokens,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return response.choices[0].message.content.strip()
 
     def summarize(self, full_text: str, summary_type: str, summary_length: str) -> str:
         length_guide = {
